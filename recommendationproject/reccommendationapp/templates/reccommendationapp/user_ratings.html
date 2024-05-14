@@ -1,0 +1,115 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>User Ratings</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .rating-star {
+            color: gold;
+        }
+        .no-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+    </style>
+    <script>
+        function submitForm(userId) {
+            document.getElementById('user_id').value = userId;
+            document.getElementById('userForm').submit();
+        }
+    </script>
+</head>
+<body>
+  {%load static%}
+    <div class="container">
+        <h1 class="my-4">User Ratings</h1>
+
+        <!-- Section to display random user IDs -->
+        <div class="mb-4">
+            <h5>User IDs with 5 or more reviews:</h5>
+            <div>
+                {% for id in random_user_ids %}
+                    <button type="button" class="btn btn-info btn-sm m-1" onclick="submitForm('{{ id }}')">{{ id }}</button>
+                {% endfor %}
+            </div>
+        </div>
+
+        <form method="post" id="userForm" class="mb-4">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="user_id">User ID:</label>
+                <input type="text" class="form-control" id="user_id" name="user_id" required>
+            </div>
+            <button type="submit" class="btn btn-primary">Get Ratings and Recommendations</button>
+        </form>
+
+        {% if user_ratings is not None %}
+            <ul class="nav nav-tabs" id="myTab" role="tablist">
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link active" id="ratings-tab" data-toggle="tab" href="#ratings" role="tab" aria-controls="ratings" aria-selected="true">Ratings</a>
+                </li>
+                <li class="nav-item" role="presentation">
+                    <a class="nav-link" id="recommendations-tab" data-toggle="tab" href="#recommendations" role="tab" aria-controls="recommendations" aria-selected="false">Recommendations</a>
+                </li>
+            </ul>
+            <div class="tab-content" id="myTabContent">
+                <div class="tab-pane fade show active" id="ratings" role="tabpanel" aria-labelledby="ratings-tab">
+                    <h2 class="my-4">Ratings for User {{ user_id }}</h2>
+                    <div class="row">
+                        {% for rating in user_ratings %}
+                            <div class="col-md-4 mb-4">
+                                <div class="card h-100">
+                                    {% if rating.book.image_url_m %}
+                                        <img src="{{ rating.book.image_url_m }}" class="card-img-top" alt="{{ rating.book.title }}">
+                                    {% else %}
+                                        <img src="{% static 'reccommendationapp/images/no_image_available.png' %}" class="card-img-top no-image" alt="No Image Available">
+                                    {% endif %}
+                                    <div class="card-body">
+                                        <h5 class="card-title">{{ rating.book.title }}</h5>
+                                        <p class="card-text">{{ rating.book.author }}</p>
+                                        <p class="card-text">ISBN: {{ rating.book.isbn }}</p>
+                                        <p class="card-text">Year of Publication: {{ rating.book.year_of_publication }}</p>
+                                        <p class="card-text">Rating: {{ rating.book_rating }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+                <div class="tab-pane fade" id="recommendations" role="tabpanel" aria-labelledby="recommendations-tab">
+                    <h2 class="my-4">Recommendations for User {{ user_id }}</h2>
+                    <div class="row">
+                        {% for recommendation in recommendations %}
+                            <div class="col-md-4 mb-4">
+                                <div class="card h-100">
+                                    {% if recommendation.book.image_url_m %}
+                                        <img src="{{ recommendation.book.image_url_m }}" class="card-img-top" alt="{{ recommendation.book.title }}">
+                                    {% else %}
+                                        <img src="{% static 'reccommendationapp/images/no_image_available.png' %}" class="card-img-top no-image" alt="No Image Available">
+                                    {% endif %}
+                                    <div class="card-body">
+                                        <h5 class="card-title">{{ recommendation.book.title }}</h5>
+                                        <p class="card-text">{{ recommendation.book.author }}</p>
+                                        <p class="card-text">ISBN: {{ recommendation.book.isbn }}</p>
+                                        <p class="card-text">Year of Publication: {{ recommendation.book.year_of_publication }}</p>
+                                        <p class="card-text">Predicted Rating: {{ recommendation.predicted_rating }}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+</body>
+</html>
