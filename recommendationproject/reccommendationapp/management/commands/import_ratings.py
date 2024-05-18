@@ -25,7 +25,7 @@ class Command(BaseCommand):
         existing_users = {user.user_id: user for user in User.objects.all()}
         existing_books = {book.isbn: book for book in Book.objects.all()}
 
-        with open(csv_file, newline='', encoding='utf-8') as file:
+        with open(csv_file, newline='', encoding='latin1') as file:  # Changed encoding to 'latin1'
             reader = csv.reader(file, delimiter=';')
             header = next(reader)  # Skip the header row
 

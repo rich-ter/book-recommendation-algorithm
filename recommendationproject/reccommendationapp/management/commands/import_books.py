@@ -1,5 +1,6 @@
 import csv
 import logging
+import os
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from reccommendationapp.models import Book
@@ -7,6 +8,25 @@ from reccommendationapp.models import Book
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+def preprocess_csv(input_file, output_file, header):
+    with open(input_file, 'r', encoding='latin1') as infile, open(output_file, 'w', encoding='latin1', newline='') as outfile:
+        reader = csv.reader(infile, delimiter=';', quotechar='"')
+        writer = csv.writer(outfile, delimiter=';', quotechar='"')
+
+        writer.writerow(header)  # Write the header to the output file
+
+        for row in reader:
+            # Join the row and then split it back to ensure proper alignment
+            joined_row = ';'.join(row)
+            split_row = joined_row.split(';')
+
+            # Ensure the row has the correct number of columns by filling missing values with 'N/A'
+            if len(split_row) < len(header):
+                split_row.extend(['N/A'] * (len(header) - len(split_row)))
+            elif len(split_row) > len(header):
+                split_row = split_row[:len(header)]
+            writer.writerow(split_row)
 
 class Command(BaseCommand):
     help = 'Import book data from CSV file'
@@ -17,6 +37,15 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **kwargs):
         csv_file = kwargs['csv_file']
+        temp_csv_file_path = 'temp_books.csv'
+        
+        # Preprocess CSV to ensure correct alignment
+        with open(csv_file, newline='', encoding='latin1') as file:
+            reader = csv.reader(file, delimiter=';', quotechar='"')
+            header = next(reader)  # Read the header
+        preprocess_csv(csv_file, temp_csv_file_path, header)
+        logger.info(f'Preprocessed CSV file created: {temp_csv_file_path}')
+
         books_to_create = []
         books_to_update = []
         count = 0
@@ -25,8 +54,8 @@ class Command(BaseCommand):
         # Cache existing books
         existing_books = {book.isbn: book for book in Book.objects.all()}
 
-        with open(csv_file, newline='', encoding='utf-8') as file:
-            reader = csv.reader(file, delimiter=';')
+        with open(temp_csv_file_path, newline='', encoding='latin1') as file:
+            reader = csv.reader(file, delimiter=';', quotechar='"')
             header = next(reader)  # Skip the header row
 
             for row in reader:
@@ -39,7 +68,7 @@ class Command(BaseCommand):
                         book = existing_books[isbn]
                         book.title = title
                         book.author = author
-                        book.year_of_publication = int(year)
+                        book.year_of_publication = int(year) if year.isdigit() else None
                         book.publisher = publisher
                         book.image_url_s = url_s
                         book.image_url_m = url_m
@@ -52,7 +81,7 @@ class Command(BaseCommand):
                                 isbn=isbn,
                                 title=title,
                                 author=author,
-                                year_of_publication=int(year),
+                                year_of_publication=int(year) if year.isdigit() else None,
                                 publisher=publisher,
                                 image_url_s=url_s,
                                 image_url_m=url_m,

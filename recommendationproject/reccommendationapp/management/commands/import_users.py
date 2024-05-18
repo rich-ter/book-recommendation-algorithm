@@ -1,5 +1,6 @@
 import csv
 import logging
+import os
 from django.core.management.base import BaseCommand
 from django.db import transaction
 from reccommendationapp.models import User
@@ -9,7 +10,8 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 def preprocess_users_csv(input_file, output_file):
-    with open(input_file, newline='', encoding='utf-8') as infile, open(output_file, 'w', newline='', encoding='utf-8') as outfile:
+    logger.info(f'Preprocessing CSV: {input_file} -> {output_file}')
+    with open(input_file, newline='', encoding='latin1') as infile, open(output_file, 'w', newline='', encoding='utf-8') as outfile:
         reader = csv.reader(infile, delimiter=';')
         writer = csv.writer(outfile, delimiter=';')
 
@@ -31,14 +33,25 @@ class Command(BaseCommand):
     help = 'Import user data from CSV file'
 
     def add_arguments(self, parser):
-        parser.add_argument('csv_file', type=str, help='The path to the users CSV file')
+        parser.add_argument('csv_file', type=str, help='The relative path to the users CSV file')
 
     @transaction.atomic
     def handle(self, *args, **kwargs):
         csv_file = kwargs['csv_file']
-        temp_file = 'temp_users.csv'
+        # Adjust base_dir to point to the project root directory
+        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+        csv_file_path = os.path.join(base_dir, csv_file)
+        logger.info(f'Input CSV file: {csv_file_path}')
 
-        preprocess_users_csv(csv_file, temp_file)
+        if not os.path.exists(csv_file_path):
+            logger.error(f'File not found: {csv_file_path}')
+            self.stdout.write(self.style.ERROR(f'File not found: {csv_file_path}'))
+            return
+
+        temp_file = os.path.join(os.path.dirname(csv_file_path), 'temp_users.csv')
+        logger.info(f'Temporary CSV file: {temp_file}')
+
+        preprocess_users_csv(csv_file_path, temp_file)
 
         users_to_create = []
         users_to_update = []
