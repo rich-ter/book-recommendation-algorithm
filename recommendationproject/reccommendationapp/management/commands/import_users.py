@@ -38,9 +38,7 @@ class Command(BaseCommand):
     @transaction.atomic
     def handle(self, *args, **kwargs):
         csv_file = kwargs['csv_file']
-        # Adjust base_dir to point to the project root directory
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-        csv_file_path = os.path.join(base_dir, csv_file)
+        csv_file_path = os.path.abspath(csv_file)
         logger.info(f'Input CSV file: {csv_file_path}')
 
         if not os.path.exists(csv_file_path):

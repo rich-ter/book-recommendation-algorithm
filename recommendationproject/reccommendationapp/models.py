@@ -1,8 +1,8 @@
 from django.db import models
 
 class Book(models.Model):
-    isbn = models.CharField(max_length=200)
-    title = models.CharField(max_length=255)
+    isbn = models.CharField(max_length=200, db_index=True)
+    title = models.CharField(max_length=255, db_index=True)
     author = models.CharField(max_length=255)
     year_of_publication = models.IntegerField(null=True, blank=True)
     publisher = models.CharField(max_length=255)
@@ -14,7 +14,7 @@ class Book(models.Model):
         return self.title
 
 class User(models.Model):
-    user_id = models.IntegerField(unique=True)
+    user_id = models.IntegerField(unique=True, primary_key=True)
     location = models.CharField(max_length=255)
     age = models.IntegerField(null=True, blank=True)
 
@@ -23,7 +23,7 @@ class User(models.Model):
 
 class Rating(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE)
-    book = models.ForeignKey(Book, on_delete=models.CASCADE)
+    book = models.ForeignKey(Book, on_delete=models.CASCADE, db_index=True)
     book_rating = models.IntegerField()
 
     def __str__(self):
