@@ -5,18 +5,30 @@ import pandas as pd
 import numpy as np
 from django.db.models import Count, FloatField
 from django.db.models.functions import Cast
+import logging
 
 # Set up Django environment
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'recommendationproject.settings')
 django.setup()
 
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 from reccommendationapp.models import Rating
 
-def print_rating_data_types():
-    # Εκτύπωση του τύπου δεδομένων για τις βαθμολογίες
-    print("Rating Data Types:")
-    for field in Rating._meta.get_fields():
-        print(f"{field.name}: {field.get_internal_type()}")
+
+ratings_file_path = r'C:\Users\User\OneDrive\Desktop\masters\chalkidi-warehouses\recommendationproject\data\BX-Book-Ratings.csv'
+
+
+def readRatingsData():
+    ratings_df = pd.read_csv(ratings_file_path, delimiter=';', encoding='ISO-8859-1', on_bad_lines='skip')
+    print("\nData types of books data:")
+    print(ratings_df.info())
+    
+def checkRatingsInDatabase():
+    ratings_count = Rating.objects.count()
+    print(f'Total number of ratings in our database: {ratings_count}')
 
 def print_unique_ratings():
     # Εκτυπώνουμε όλες τις μοναδικές τιμές του γνωρίσματος 'book_rating' των βαθμολογιών
@@ -43,12 +55,25 @@ def create_rating_distribution_plot():
     plt.title('Book Rating Distribution')
     plt.show()
 
+def remove_zero_ratings():
+    zero_ratings_count = Rating.objects.filter(book_rating=0).count()
+    logger.info(f"Number of ratings with value 0: {zero_ratings_count}")
+    
+    Rating.objects.filter(book_rating=0).delete()
+    
+    logger.info(f"Removed {zero_ratings_count} ratings with value 0 from the database")
+
+
 if __name__ == "__main__":
     # Step 1: Check Data Types
-    print_rating_data_types()
+    # readRatingsData()
 
     # Step 2: Extract Unique Ratings
-    print_unique_ratings()
+    # print_unique_ratings()
 
     # Step 3: Create Rating Distribution Plot
+    # create_rating_distribution_plot()
+    # checkRatingsInDatabase()
+    # remove_zero_ratings()
+    # checkRatingsInDatabase()
     create_rating_distribution_plot()
