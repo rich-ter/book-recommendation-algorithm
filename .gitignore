@@ -1,2 +1,5 @@
 /venv
 /recommendationproject/db.sqlite3
+/recommendationproject/book_indices.pkl
+/recommendationproject/nn_model.pkl
+/recommendationproject/svd_model.pkl

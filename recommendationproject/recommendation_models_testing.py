@@ -10,6 +10,8 @@ from django.core.cache import cache
 from django.db.utils import OperationalError
 import logging
 import numpy as np
+import random
+import multiprocessing
 
 # Setup Django environment
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'recommendationproject.settings')
@@ -60,15 +62,11 @@ def content_based_recommendations(user_id, num_recommendations=10):
 
 # Collaborative Filtering with SVD
 def collaborative_filtering_recommendations(user_id, num_recommendations=10):
+    svd = load_or_compute_svd()
     ratings_df = load_data()
+    
     if ratings_df.empty:
         return []
-
-    reader = Reader(rating_scale=(1, 10))
-    data = Dataset.load_from_df(ratings_df[['user_id', 'book__isbn', 'book_rating']], reader)
-    trainset = data.build_full_trainset()
-    svd = SVD()
-    svd.fit(trainset)
 
     user_ratings = ratings_df[ratings_df['user_id'] == user_id]
     if user_ratings.empty:
@@ -85,24 +83,25 @@ def collaborative_filtering_recommendations(user_id, num_recommendations=10):
 
 # Hybrid Recommendation
 def hybrid_recommendations(user_id, num_recommendations=10):
-    books = pd.DataFrame(list(Book.objects.all().values()))
-
-    nn = load_or_compute_nn(books)
+    nn = load_or_compute_nn()
     svd = load_or_compute_svd()
 
     content_recs = content_based_recommendations(user_id, num_recommendations * 2)
     content_rec_isbns = content_recs['isbn'].tolist()
 
-    collaborative_predictions = [svd.predict(user_id, isbn) for isbn in content_rec_isbns]
-    collaborative_predictions.sort(key=lambda x: x.est, reverse=True)
+    collaborative_predictions = [svd.predict(user_id, isbn).est for isbn in content_rec_isbns]
 
-    top_books = [prediction.iid for prediction in collaborative_predictions[:num_recommendations]]
-    return Book.objects.filter(isbn__in=top_books)
+    hybrid_scores = [a * 0.5 + b * 0.5 for a, b in zip(content_recs['average_rating'], collaborative_predictions)]
+    hybrid_recommendations = content_recs.iloc[np.argsort(hybrid_scores)[-num_recommendations:]]
+    
+    return hybrid_recommendations
 
-def load_or_compute_nn(books):
+# Model caching functions
+def load_or_compute_nn():
     nn = cache.get('nn_model')
     book_indices = cache.get('book_indices')
     if nn is None or book_indices is None:
+        books = pd.DataFrame(list(Book.objects.all().values()))
         tfidf = TfidfVectorizer(stop_words='english', max_features=5000)
         tfidf_matrix = tfidf.fit_transform(books['title'])
 
@@ -132,73 +131,56 @@ def evaluate_model(testset):
     predictions = [svd.predict(uid, iid).est for uid, iid, _ in testset]
     actuals = [true_r for _, _, true_r in testset]
     return mean_squared_error(actuals, predictions)
-# Calculate MSE for a subset of users using the hybrid method
-def calculate_hybrid_mse(num_users=5, num_recommendations=10):
-    svd = load_or_compute_svd()  # Ensure the SVD model is loaded or computed
-    ratings_df = load_data()
-    test_users = np.random.choice(ratings_df['user_id'].unique(), num_users, replace=False)
-    testset = []
 
-    for user_id in test_users:
-        logger.info(f"Generating recommendations for user {user_id}")
-        content_recs = content_based_recommendations(user_id, num_recommendations * 2)
-        content_rec_isbns = content_recs['isbn'].tolist()
-        logger.info(f"Content-based recommendations for user {user_id}: {content_rec_isbns}")
-
-        collaborative_predictions = [svd.predict(user_id, isbn) for isbn in content_rec_isbns]
-        collaborative_predictions.sort(key=lambda x: x.est, reverse=True)
-
-        user_actual_ratings = ratings_df[ratings_df['user_id'] == user_id]
-        logger.info(f"User {user_id} actual ratings: {user_actual_ratings}")
-
-        for pred in collaborative_predictions[:num_recommendations]:
-            true_rating = user_actual_ratings[user_actual_ratings['book__isbn'] == pred.iid]['book_rating']
-            if not true_rating.empty:
-                testset.append((user_id, pred.iid, true_rating.values[0]))
-                logger.info(f"Added true rating for user {user_id} and book {pred.iid}")
-            else:
-                logger.warning(f"No true rating found for user {user_id} and book {pred.iid}")
-
-    if not testset:
-        logger.warning("Test set is empty for hybrid MSE calculation.")
-        return float('inf')  # Return infinity to indicate an issue
-
-    logger.info(f"Evaluating hybrid MSE with {len(testset)} entries")
-    return evaluate_model(testset)
-if __name__ == "__main__":
-    user_id = 115045  # Example user_id
-    num_recommendations = 10
-
-    # Get content-based recommendations
-    content_based_recs = content_based_recommendations(user_id, num_recommendations)
-    print("Content-Based Recommendations:")
-    for book in content_based_recs.itertuples():
-        print(f"Title: {book.title}, Author: {book.author}, Year: {book.year_of_publication}, Publisher: {book.publisher}")
-
-    # Get collaborative filtering recommendations
-    collaborative_recs = collaborative_filtering_recommendations(user_id, num_recommendations)
-    print("\nCollaborative Filtering Recommendations:")
-    for book in collaborative_recs:
-        print(f"Title: {book.title}, Author: {book.author}, Year: {book.year_of_publication}, Publisher: {book.publisher}")
-
-    # Get hybrid recommendations
-    hybrid_recs = hybrid_recommendations(user_id, num_recommendations)
-    print("\nHybrid Recommendations:")
-    for book in hybrid_recs:
-        print(f"Title: {book.title}, Author: {book.author}, Year: {book.year_of_publication}, Publisher: {book.publisher}")
-
-    # Evaluate the collaborative filtering model
+# Evaluate the collaborative filtering model
+def evaluate_collaborative_filtering_model():
     ratings_df = load_data()
     reader = Reader(rating_scale=(1, 10))
     data = Dataset.load_from_df(ratings_df[['user_id', 'book__isbn', 'book_rating']], reader)
     trainset, testset = train_test_split(data, test_size=0.2)
     mse = evaluate_model(testset)
-    print(f"\nMean Squared Error for Collaborative Filtering: {mse}")
+    return mse
 
-    # Select 10 users randomly for testing
-    users = User.objects.all().values_list('user_id', flat=True)
-    test_users = np.random.choice(users, 10, replace=False)
+# Calculate MSE for a subset of users using the hybrid method
+def calculate_hybrid_mse(num_users=5, num_recommendations=10):
+    svd = load_or_compute_svd()  # Ensure the SVD model is loaded or computed
+    ratings_df = load_data()
+    test_users = random.sample(list(ratings_df['user_id'].unique()), min(num_users, len(ratings_df['user_id'].unique())))
+    testset = []
 
-    # Calculate MSE for a subset of users using the hybrid method
-    hybrid_mse = calculate_hybrid_mse(test_users, num_recommendations)
-    print(f"\nHybrid Method Mean Squared Error: {hybrid_mse}")
+    for user_id in test_users:
+        content_recs = content_based_recommendations(user_id, num_recommendations * 2)
+        content_rec_isbns = content_recs['isbn'].tolist()
+
+        collaborative_predictions = [svd.predict(user_id, isbn) for isbn in content_rec_isbns]
+        collaborative_predictions.sort(key=lambda x: x.est, reverse=True)
+
+        user_actual_ratings = ratings_df[ratings_df['user_id'] == user_id]
+
+        for pred in collaborative_predictions[:num_recommendations]:
+            true_rating = user_actual_ratings[user_actual_ratings['book__isbn'] == pred.iid]['book_rating']
+            if not true_rating.empty:
+                testset.append((user_id, pred.iid, true_rating.values[0]))
+
+    if not testset:
+        return float('inf')  # Return infinity to indicate an issue
+
+    return evaluate_model(testset)
+
+if __name__ == "__main__":
+    num_recommendations = 10
+
+    # Get hybrid recommendations for a specific user
+    user_id = 115045  # Example user_id
+    hybrid_recs = hybrid_recommendations(user_id, num_recommendations)
+    print("\nHybrid Recommendations:")
+    for book in hybrid_recs.itertuples():
+        print(f"Title: {book.title}, Author: {book.author}, Year: {book.year_of_publication}, Publisher: {book.publisher}")
+
+    # Evaluate the collaborative filtering model
+    mse_collaborative = evaluate_collaborative_filtering_model()
+    print(f"\nMean Squared Error for Collaborative Filtering: {mse_collaborative}")
+
+    # Evaluate the hybrid model
+    mse_hybrid = calculate_hybrid_mse()
+    print(f"\nMean Squared Error for Hybrid Model: {mse_hybrid}")
