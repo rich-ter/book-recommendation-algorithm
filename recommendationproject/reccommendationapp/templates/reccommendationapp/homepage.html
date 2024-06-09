@@ -1,0 +1,60 @@
+{% extends 'reccommendationapp/base.html' %}
+{% block title %}Homepage{% endblock %}
+{% block content %}
+<div class="text-center my-4">
+    <h2>Welcome to the Book Recommendation System</h2>
+    <p class="lead">
+        This application provides personalized book recommendations based on user ratings and book content.
+        It leverages both collaborative filtering and content-based filtering techniques to suggest books that you might enjoy.
+    </p>
+</div>
+
+<div class="card-deck mb-4">
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Collaborative Filtering</h5>
+            <p class="card-text">
+                Collaborative filtering predicts a user's interests by collecting preferences from many users. This approach is used to find similarities between users and suggest books that similar users have liked.
+            </p>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Content-Based Filtering</h5>
+            <p class="card-text">
+                Content-based filtering recommends items by comparing item features. This technique analyzes the characteristics of the books and suggests those that match your previous preferences.
+            </p>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Hybrid Model</h5>
+            <p class="card-text">
+                Our hybrid model combines collaborative and content-based filtering to provide more accurate recommendations. It utilizes the strengths of both models to improve the recommendation quality.
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Technologies and Libraries</h5>
+        <ul class="list-unstyled">
+            <li><strong>Django:</strong> A high-level Python web framework that encourages rapid development and clean, pragmatic design.</li>
+            <li><strong>Pandas:</strong> A powerful data analysis and manipulation library for Python.</li>
+            <li><strong>Scikit-learn:</strong> A machine learning library for Python that provides simple and efficient tools for data mining and data analysis.</li>
+            <li><strong>Surprise:</strong> A Python scikit for building and analyzing recommender systems that deal with explicit rating data.</li>
+        </ul>
+    </div>
+</div>
+
+<div class="text-center mb-4">
+    <h5>User IDs with 5 or more reviews:</h5>
+    <div>
+        {% for id in random_user_ids %}
+            <a href="{% url 'user_ratings' id %}" class="btn btn-info btn-sm m-1">{{ id }}</a>
+        {% endfor %}
+    </div>
+</div>
+
+{% endblock %}

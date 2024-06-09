@@ -8,13 +8,16 @@ from sklearn.metrics import mean_squared_error
 import logging
 import random
 from django.db.models import Avg
+import numpy as np
 
 # Setup Django environment
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'recommendationproject.settings')
 django.setup()
 
 from reccommendationapp.models import Book, Rating
-
+SEED = 42
+np.random.seed(SEED)
+random.seed(SEED)
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -133,8 +136,10 @@ def evaluate_model(testset, svd):
     return mse
 
 if __name__ == "__main__":
-    num_recommendations = 5
-    user_id = 81689
+    num_recommendations = 10
+    # user_id = 81689 #spanish guy
+    # user_id = 169781 #wizard guy
+    user_id = 239106 #tech guy
 
     # Load data and models
     ratings_df = load_data()

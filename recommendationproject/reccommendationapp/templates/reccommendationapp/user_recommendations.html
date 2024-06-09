@@ -1,0 +1,33 @@
+{% extends 'reccommendationapp/base.html' %}
+{%load static%}
+{% block title %}User Recommendations{% endblock %}
+{% block content %}
+<div id="results">
+    {% if recommendations %}
+        <div id="recommendations" class="row">
+            <h2 class="my-4">Recommendations for User {{ user_id }}</h2>
+            <div class="row">
+                {% for rec in recommendations %}
+                    <div class="col-md-4 mb-4">
+                        <div class="card h-100">
+                            {% if rec.image_url_m %}
+                                <img src="{{ rec.image_url_m }}" class="card-img-top" alt="{{ rec.title }}">
+                            {% else %}
+                                <img src="{% static 'reccommendationapp/images/no_image_available.png' %}" class="card-img-top no-image" alt="No Image Available">
+                            {% endif %}
+                            <div class="card-body">
+                                <h5 class="card-title">{{ rec.title }}</h5>
+                                <p class="card-text">{{ rec.author }}</p>
+                                <p class="card-text">ISBN: {{ rec.isbn }}</p>
+                                <p class="card-text">Year of Publication: {{ rec.year_of_publication }}</p>
+                            </div>
+                        </div>
+                    </div>
+                {% endfor %}
+            </div>
+        </div>
+    {% else %}
+        <p>No recommendations found for this user.</p>
+    {% endif %}
+</div>
+{% endblock %}

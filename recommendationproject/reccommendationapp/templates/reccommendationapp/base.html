@@ -1,0 +1,104 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{% block title %}Recommendation System{% endblock %}</title>
+    <!-- Bootstrap CSS -->
+    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+    <style>
+        .rating-star {
+            color: gold;
+        }
+        .no-image {
+            width: 100%;
+            height: auto;
+            display: block;
+            margin: 0 auto;
+        }
+        .card-deck .card {
+            margin: 15px 0;
+        }
+        .card-title {
+            color: #007bff;
+        }
+        .card-body ul {
+            padding-left: 20px;
+        }
+        .card-body ul li {
+            margin-bottom: 10px;
+        }
+        .lead {
+            font-size: 1.25rem;
+            font-weight: 300;
+        }
+    </style>
+</head>
+<body>
+    <div class="container text-center my-4">
+        <h1>Recommendation System</h1>
+    </div>
+
+    <div class="container">
+        <div class="mb-4 text-center">
+            <h5>User IDs with 5 or more reviews:</h5>
+            <div>
+                {% for id in random_user_ids %}
+                    <a href="{% url 'user_ratings' id %}" class="btn btn-info btn-sm m-1">{{ id }}</a>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="text-center mb-4">
+            <form id="userForm" class="form-inline justify-content-center">
+                <div class="form-group mx-2">
+                    <label for="user_id">User ID:</label>
+                    <input type="text" class="form-control mx-2" id="user_id" name="user_id" value="{% if selected_user_id %}{{ selected_user_id }}{% endif %}" required>
+                </div>
+                <button type="button" class="btn btn-primary mx-2" onclick="submitRatingsForm()">Get Ratings</button>
+                <button type="button" class="btn btn-secondary mx-2" onclick="submitRecommendationsForm()">Get Recommendations</button>
+            </form>
+        </div>
+
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Bootstrap JS and dependencies -->
+    <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.9.3/dist/umd/popper.min.js"></script>
+    <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script>
+        function getCookie(name) {
+            let cookieValue = null;
+            if (document.cookie && document.cookie !== '') {
+                const cookies = document.cookie.split(';');
+                for (let i = 0; i < cookies.length; i++) {
+                    const cookie = cookies[i].trim();
+                    if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                        break;
+                    }
+                }
+            }
+            return cookieValue;
+        }
+
+        function submitRatingsForm() {
+            const userId = document.getElementById('user_id').value;
+            if (!userId) {
+                alert('Please enter a user ID.');
+                return;
+            }
+            window.location.href = `/ratings/${userId}/`;
+        }
+
+        function submitRecommendationsForm() {
+            const userId = document.getElementById('user_id').value;
+            if (!userId) {
+                alert('Please enter a user ID.');
+                return;
+            }
+            window.location.href = `/recommendations/${userId}/`;
+        }
+    </script>
+</body>
+</html>
