@@ -15,23 +15,79 @@
             <h5 class="card-title">Collaborative Filtering</h5>
             <p class="card-text">
                 Collaborative filtering predicts a user's interests by collecting preferences from many users. This approach is used to find similarities between users and suggest books that similar users have liked.
+                <br><br>
+                <strong>Type:</strong> Supervised Learning<br>
+                <strong>Algorithm:</strong> Singular Value Decomposition (SVD)<br>
+                <strong>How it works:</strong> 
+                <ul>
+                    <li>Construct a user-item matrix where each entry represents the rating given by a user to an item.</li>
+                    <li>Decompose this matrix into three lower-dimensional matrices (U, Σ, V^T) using SVD.</li>
+                    <li>Predict missing ratings by computing the dot product of the user and item feature vectors.</li>
+                </ul>
+                <br>
+                <strong>Benefits:</strong> Effectively handles sparsity and provides accurate recommendations by uncovering latent features.
             </p>
+            <svg height="200" width="400">
+                <rect x="50" y="20" width="300" height="150" style="fill:blue;stroke-width:1;stroke:black"/>
+                <text x="70" y="50" fill="white">User-Item Matrix</text>
+                <line x1="200" y1="20" x2="200" y2="170" style="stroke:black;stroke-width:1"/>
+                <text x="70" y="110" fill="white">Users</text>
+                <text x="220" y="50" fill="white">Items</text>
+                <text x="150" y="180" fill="black">SVD Decomposition</text>
+            </svg>
         </div>
     </div>
     <div class="card">
         <div class="card-body">
             <h5 class="card-title">Content-Based Filtering</h5>
             <p class="card-text">
-                Content-based filtering recommends items by comparing item features. This technique analyzes the characteristics of the books and suggests those that match your previous preferences.
+                Content-based filtering recommends items by comparing item features. This technique analyzes the characteristics of the books, such as the title, author, and other metadata, and suggests those that match your previous preferences.
+                <br><br>
+                <strong>Type:</strong> Unsupervised Learning<br>
+                <strong>Algorithm:</strong> TF-IDF Vectorization and Nearest Neighbors<br>
+                <strong>How it works:</strong>
+                <ul>
+                    <li>Represent each item using TF-IDF vectors based on the textual content.</li>
+                    <li>Compute similarities between items using cosine similarity.</li>
+                    <li>Recommend items that are most similar to the ones the user has previously liked.</li>
+                </ul>
+                <br>
+                <strong>Benefits:</strong> Provides recommendations based on the intrinsic properties of items, ensuring diversity.
             </p>
+            <svg height="200" width="400">
+                <rect x="50" y="20" width="300" height="150" style="fill:green;stroke-width:1;stroke:black"/>
+                <text x="70" y="50" fill="white">TF-IDF Matrix</text>
+                <line x1="200" y1="20" x2="200" y2="170" style="stroke:black;stroke-width:1"/>
+                <text x="70" y="110" fill="white">Features</text>
+                <text x="220" y="50" fill="white">Items</text>
+                <text x="150" y="180" fill="black">Cosine Similarity</text>
+            </svg>
         </div>
     </div>
     <div class="card">
         <div class="card-body">
             <h5 class="card-title">Hybrid Model</h5>
             <p class="card-text">
-                Our hybrid model combines collaborative and content-based filtering to provide more accurate recommendations. It utilizes the strengths of both models to improve the recommendation quality.
+                The hybrid model combines collaborative and content-based filtering to provide more accurate recommendations. It leverages the strengths of both methods to enhance the quality of the recommendations.
+                <br><br>
+                <strong>Type:</strong> Combination of Supervised and Unsupervised Learning<br>
+                <strong>How it works:</strong>
+                <ul>
+                    <li>Generate content-based recommendations by finding items similar to those the user has rated.</li>
+                    <li>Apply collaborative filtering on the content-based recommendations to predict ratings.</li>
+                    <li>Combine the results to provide the final recommendations.</li>
+                </ul>
+                <br>
+                <strong>Benefits:</strong> Balances the relevance and diversity of recommendations, improving accuracy and user satisfaction.
             </p>
+            <svg height="200" width="400">
+                <rect x="50" y="20" width="300" height="150" style="fill:purple;stroke-width:1;stroke:black"/>
+                <text x="70" y="50" fill="white">Hybrid Model</text>
+                <line x1="200" y1="20" x2="200" y2="170" style="stroke:black;stroke-width:1"/>
+                <text x="70" y="110" fill="white">Users</text>
+                <text x="220" y="50" fill="white">Items</text>
+                <text x="150" y="180" fill="black">Combined Filtering</text>
+            </svg>
         </div>
     </div>
 </div>
@@ -48,13 +104,5 @@
     </div>
 </div>
 
-<div class="text-center mb-4">
-    <h5>User IDs with 5 or more reviews:</h5>
-    <div>
-        {% for id in random_user_ids %}
-            <a href="{% url 'user_ratings' id %}" class="btn btn-info btn-sm m-1">{{ id }}</a>
-        {% endfor %}
-    </div>
-</div>
 
 {% endblock %}
