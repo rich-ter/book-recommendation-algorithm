@@ -1,16 +1,22 @@
-from django.shortcuts import render, get_object_or_404
-from django.http import JsonResponse
-from .models import User, Rating, Book
-import random
-from django.db.models import Count
 import os
 import sys
 import json
+import time
+import logging
+from django.shortcuts import render, get_object_or_404
+from django.http import JsonResponse
+from .models import User, Rating, Book
+from django.db.models import Count
+import random
 
 # Ensure the recommendation module is in the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from maybe_solution import load_data, build_tfidf_matrix, load_or_compute_nn, load_or_compute_svd, hybrid_recommendations
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def user_ratings_view(request):
     user_ratings = None
@@ -42,13 +48,20 @@ def fetch_recommendations(request):
             return JsonResponse({'error': 'User ID is required.'}, status=400)
         
         user = get_object_or_404(User, user_id=user_id)
-        
+
         # Fetch recommendations using the hybrid recommendation system
+        logger.info("Loading ratings data...")
         ratings_df = load_data()
+        logger.info("Building TF-IDF matrix...")
         tfidf_matrix, books = build_tfidf_matrix()
+        logger.info("Computing Nearest Neighbors model for books...")
         nn = load_or_compute_nn(tfidf_matrix)
+        logger.info("Computing SVD model for collaborative filtering...")
         svd = load_or_compute_svd(ratings_df)
+        logger.info("Generating hybrid recommendations...")
+        start_time = time.time()
         recommended_books = hybrid_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, svd, num_recommendations=10)
+        end_time = time.time()
 
         recommendations = [
             {
@@ -57,11 +70,11 @@ def fetch_recommendations(request):
                 'isbn': book.isbn,
                 'year_of_publication': book.year_of_publication,
                 'image_url_m': book.image_url_m,
-                'predicted_rating': 'N/A'  # Replace with actual predicted rating logic if needed
             }
             for book in recommended_books
         ]
         
+        logger.info(f"Total time taken: {end_time - start_time} seconds")
         return JsonResponse({'recommendations': recommendations})
     
     return JsonResponse({'error': 'Invalid request method.'}, status=405)

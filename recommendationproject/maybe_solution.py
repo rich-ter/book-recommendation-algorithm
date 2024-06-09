@@ -4,10 +4,10 @@ import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sklearn.neighbors import NearestNeighbors
 from surprise import Dataset, Reader, SVD
-from surprise.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error
 import logging
 import random
+from django.db.models import Avg
 
 # Setup Django environment
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'recommendationproject.settings')
@@ -26,10 +26,20 @@ def load_data():
     logger.info("Ratings data loaded successfully.")
     return pd.DataFrame(ratings)
 
+# Compute average rating for each book
+def compute_average_ratings():
+    logger.info("Computing average ratings for each book...")
+    avg_ratings = Rating.objects.values('book__isbn').annotate(avg_rating=Avg('book_rating'))
+    books = pd.DataFrame(list(Book.objects.all().values()))
+    avg_ratings_df = pd.DataFrame(list(avg_ratings))
+    books = books.merge(avg_ratings_df, left_on='isbn', right_on='book__isbn', how='left')
+    books['avg_rating'].fillna(0, inplace=True)
+    return books
+
 # Build and cache the TF-IDF matrix
 def build_tfidf_matrix():
     logger.info("Building TF-IDF matrix...")
-    books = pd.DataFrame(list(Book.objects.all().values()))
+    books = compute_average_ratings()
     tfidf = TfidfVectorizer(stop_words='english', max_features=1000)
     tfidf_matrix = tfidf.fit_transform(books['title'])
     return tfidf_matrix, books
@@ -57,7 +67,7 @@ def content_based_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, 
     user_ratings = ratings_df[ratings_df['user_id'] == user_id]
 
     if user_id not in ratings_df['user_id'].values:
-        return books.nlargest(num_recommendations, 'average_rating')
+        return books.nlargest(num_recommendations, 'avg_rating')
 
     user_books_indices = [books.index[books['isbn'] == isbn].tolist()[0] for isbn in user_ratings['book__isbn']]
     sim_scores = nn.kneighbors(tfidf_matrix[user_books_indices], n_neighbors=len(books), return_distance=False).flatten()
@@ -69,8 +79,8 @@ def collaborative_filtering_recommendations(user_id, ratings_df, svd, num_recomm
     logger.info(f"Generating collaborative filtering recommendations for user {user_id}...")
     user_ratings = ratings_df[ratings_df['user_id'] == user_id]
     if user_ratings.empty:
-        books = pd.DataFrame(list(Book.objects.all().values()))
-        return books.nlargest(num_recommendations, 'average_rating')
+        books = compute_average_ratings()
+        return books.nlargest(num_recommendations, 'avg_rating')
 
     all_books = ratings_df['book__isbn'].unique()
     unrated_books = [isbn for isbn in all_books if isbn not in user_ratings['book__isbn'].values]
@@ -124,7 +134,7 @@ def evaluate_model(testset, svd):
 
 if __name__ == "__main__":
     num_recommendations = 5
-    user_id = 115045
+    user_id = 81689
 
     # Load data and models
     ratings_df = load_data()
@@ -148,15 +158,10 @@ if __name__ == "__main__":
     print("\nHybrid Recommendations:")
     for rec in hybrid_recs:
         print(rec.title)
-    # Load data and models
-    ratings_df = load_data()
-    tfidf_matrix, books = build_tfidf_matrix()
-    nn = load_or_compute_nn(tfidf_matrix)
-    svd = load_or_compute_svd(ratings_df)
     
     # Split dataset into train and test sets
     trainset, testset = split_train_test_set(ratings_df)
     
     # Evaluate the hybrid model on the test set
-    mse_hybrid = evaluate_model(testset, svd)  # Change this line to use hybrid recommendations
+    mse_hybrid = evaluate_model(testset, svd)
     logger.info(f"\nMean Squared Error for Hybrid Recommendations: {mse_hybrid}")
