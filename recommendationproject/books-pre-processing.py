@@ -257,17 +257,17 @@ def get_ratings_count_for_title(title):
 
 if __name__ == "__main__":
     # readBookData()
-    # checkBooksInDatabase()
+    checkBooksInDatabase()
     # create_year_distribution_plot()
     # check_null_or_empty_books()
     # duplicate_book_titles()
-    remove_duplicate_isbn()# THAT'S DEFINITELY ONE TO KEEP FOR PRE-PROCESSING.
-    remove_invalid_books() # THAT'S DEFINITELY ONE TO KEEP FOR PRE-PROCESSING. 
-    # check_duplicate_titles_and_whats_in_db()
-    # # print_top_10_duplicate_titles()
-    # print_number_of_ratings_per_title()
+    # remove_duplicate_isbn()# THAT'S DEFINITELY ONE TO KEEP FOR PRE-PROCESSING.
+    # remove_invalid_books() # THAT'S DEFINITELY ONE TO KEEP FOR PRE-PROCESSING. 
+    # # check_duplicate_titles_and_whats_in_db()
+    # # # print_top_10_duplicate_titles()
+    # # print_number_of_ratings_per_title()
 
-    consolidate_all_duplicates()
+    # consolidate_all_duplicates()# THAT'S DEFINITELY ONE TO KEEP FOR PRE-PROCESSING. 
 
     # titles = [
     #     "Selected Poems",

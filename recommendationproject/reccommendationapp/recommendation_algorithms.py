@@ -1,92 +1,185 @@
+import os
+import django
 import pandas as pd
 from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import linear_kernel
-import pickle
+from sklearn.neighbors import NearestNeighbors
 from surprise import Dataset, Reader, SVD
-from django.db import connection
-from reccommendationapp.models import Book, Rating
+from sklearn.metrics import mean_squared_error
+import logging
+import random
+from django.db.models import Avg
+import numpy as np
+from .models import User, Rating, Book
 
-# Content-Based Filtering
-def content_based_recommendations(user_id, num_recommendations=10):
+
+SEED = 42
+np.random.seed(SEED)
+random.seed(SEED)
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Load ratings data
+def load_data():
+    logger.info("Loading ratings data...")
+    ratings = list(Rating.objects.values('user_id', 'book__isbn', 'book_rating'))
+    logger.info("Ratings data loaded successfully.")
+    return pd.DataFrame(ratings)
+
+# Compute average rating for each book
+def compute_average_ratings():
+    logger.info("Computing average ratings for each book...")
+    avg_ratings = Rating.objects.values('book__isbn').annotate(avg_rating=Avg('book_rating'))
     books = pd.DataFrame(list(Book.objects.all().values()))
-    ratings = pd.DataFrame(list(Rating.objects.all().values()))
+    avg_ratings_df = pd.DataFrame(list(avg_ratings))
+    books = books.merge(avg_ratings_df, left_on='isbn', right_on='book__isbn', how='left')
+    books['avg_rating'].fillna(0, inplace=True)
+    return books
 
-    if user_id not in ratings['user_id'].values:
-        # For cold start users, recommend popular books
-        popular_books = books.nlargest(num_recommendations, 'average_rating')
-        return popular_books
-
-    user_ratings = ratings[ratings['user_id'] == user_id]
-    tfidf = TfidfVectorizer(stop_words='english')
+# Build and cache the TF-IDF matrix
+def build_tfidf_matrix():
+    logger.info("Building TF-IDF matrix...")
+    books = compute_average_ratings()
+    tfidf = TfidfVectorizer(stop_words='english', max_features=1000)
     tfidf_matrix = tfidf.fit_transform(books['title'])
-    cosine_sim = linear_kernel(tfidf_matrix, tfidf_matrix)
-    user_books_indices = [books.index[books['id'] == book_id].tolist()[0] for book_id in user_ratings['book_id']]
-    sim_scores = cosine_sim[user_books_indices].sum(axis=0)
-    sim_scores = list(enumerate(sim_scores))
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-    recommended_indices = [i[0] for i in sim_scores if i[0] not in user_books_indices][:num_recommendations]
-    recommended_books = books.iloc[recommended_indices]
-    return recommended_books
+    return tfidf_matrix, books
 
-# Collaborative Filtering with SVD
-def collaborative_filtering_recommendations(user_id, num_recommendations=10):
-    ratings_df = load_data()
+# Load or compute the Nearest Neighbors model
+def load_or_compute_nn(tfidf_matrix):
+    logger.info("Computing Nearest Neighbors model for books...")
+    nn = NearestNeighbors(metric='cosine', algorithm='brute')
+    nn.fit(tfidf_matrix)
+    return nn
+
+# Load or compute the SVD model
+def load_or_compute_svd(ratings_df):
+    logger.info("Computing SVD model for collaborative filtering...")
     reader = Reader(rating_scale=(1, 10))
-    data = Dataset.load_from_df(ratings_df[['user_id', 'book_id', 'book_rating']], reader)
+    data = Dataset.load_from_df(ratings_df[['user_id', 'book__isbn', 'book_rating']], reader)
     trainset = data.build_full_trainset()
     svd = SVD()
     svd.fit(trainset)
+    return svd
 
+# Content-Based Filtering
+def content_based_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, num_recommendations=10):
+    logger.info(f"Generating content-based recommendations for user {user_id}...")
+    user_ratings = ratings_df[ratings_df['user_id'] == user_id]
+
+    if user_id not in ratings_df['user_id'].values:
+        return books.nlargest(num_recommendations, 'avg_rating')
+
+    user_books_indices = [books.index[books['isbn'] == isbn].tolist()[0] for isbn in user_ratings['book__isbn']]
+    sim_scores = nn.kneighbors(tfidf_matrix[user_books_indices], n_neighbors=len(books), return_distance=False).flatten()
+    recommended_indices = [idx for idx in sim_scores if idx not in user_books_indices][:num_recommendations]
+    return books.iloc[recommended_indices]
+
+# Collaborative Filtering with SVD
+def collaborative_filtering_recommendations(user_id, ratings_df, svd, num_recommendations=10):
+    logger.info(f"Generating collaborative filtering recommendations for user {user_id}...")
     user_ratings = ratings_df[ratings_df['user_id'] == user_id]
     if user_ratings.empty:
-        # For cold start users, recommend popular books
-        books = pd.DataFrame(list(Book.objects.all().values()))
-        popular_books = books.nlargest(num_recommendations, 'average_rating')
-        return popular_books
+        books = compute_average_ratings()
+        return books.nlargest(num_recommendations, 'avg_rating')
 
-    all_books = ratings_df['book_id'].unique()
-    unrated_books = [book for book in all_books if book not in user_ratings['book_id'].values]
-    
-    predictions = [svd.predict(user_id, book) for book in unrated_books]
+    all_books = ratings_df['book__isbn'].unique()
+    unrated_books = [isbn for isbn in all_books if isbn not in user_ratings['book__isbn'].values]
+
+    predictions = [svd.predict(user_id, isbn) for isbn in unrated_books]
     predictions.sort(key=lambda x: x.est, reverse=True)
-    top_predictions = predictions[:num_recommendations]
-    
-    top_books = [prediction.iid for prediction in top_predictions]
-    recommended_books = Book.objects.filter(id__in=top_books)
-    return recommended_books
+    top_books = [prediction.iid for prediction in predictions[:num_recommendations]]
+    return Book.objects.filter(isbn__in=top_books)
 
 # Hybrid Recommendation
-def hybrid_recommendations(user_id, book_id, top_n=10):
-    with open('cosine_sim.pkl', 'rb') as f:
-        cosine_sim = pickle.load(f)
-    with open('book_indices.pkl', 'rb') as f:
-        book_indices = pickle.load(f)
-    with open('svd_model.pkl', 'rb') as f:
-        svd_model = pickle.load(f)
+def hybrid_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, svd, num_recommendations=10):
+    logger.info(f"Generating hybrid recommendations for user {user_id}...")
+    content_recs = content_based_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, num_recommendations * 2)
+    content_rec_isbns = content_recs['isbn'].tolist()
 
-    book_idx = book_indices.get(book_id)
-    if book_idx is None:
-        return []
+    collaborative_predictions = [svd.predict(user_id, isbn) for isbn in content_rec_isbns]
+    collaborative_predictions.sort(key=lambda x: x.est, reverse=True)
 
-    sim_scores = list(enumerate(cosine_sim[book_idx]))
-    sim_scores = sorted(sim_scores, key=lambda x: x[1], reverse=True)
-    content_recommendations = [book_indices['id'][book_idx] for book_idx, _ in sim_scores[1:top_n + 1]]
+    top_books = [prediction.iid for prediction in collaborative_predictions[:num_recommendations]]
+    return Book.objects.filter(isbn__in=top_books)
 
-    collaborative_recommendations = []
-    for book_id in content_recommendations:
-        predicted_rating = svd_model.predict(user_id, book_id).est
-        collaborative_recommendations.append((book_id, predicted_rating))
+# Function to split dataset into train and test sets based on users with ratings
+def split_train_test_set(data, test_size=0.2):
+    # Get unique users who have provided ratings
+    users_with_ratings = data['user_id'].unique()
+    
+    # Randomly select a subset of users for the test set
+    test_users = random.sample(list(users_with_ratings), int(len(users_with_ratings) * test_size))
+    
+    # Filter the dataset to include only the selected test users
+    test_data = data[data['user_id'].isin(test_users)]
+    
+    # Exclude the test users from the train set
+    train_data = data[~data['user_id'].isin(test_users)]
+    
+    # Convert train and test sets to Surprise Dataset
+    reader = Reader(rating_scale=(1, 10))
+    trainset = Dataset.load_from_df(train_data[['user_id', 'book__isbn', 'book_rating']], reader).build_full_trainset()
+    testset = Dataset.load_from_df(test_data[['user_id', 'book__isbn', 'book_rating']], reader).build_full_trainset().build_testset()
+    
+    return trainset, testset
 
-    collaborative_recommendations = sorted(collaborative_recommendations, key=lambda x: x[1], reverse=True)
-    top_books = [rec[0] for rec in collaborative_recommendations[:top_n]]
-    recommended_books = Book.objects.filter(id__in=top_books)
-    return recommended_books
-
-def load_data():
-    with connection.cursor() as cursor:
-        cursor.execute("SELECT user_id, book_id, book_rating FROM reccommendationapp_rating")
-        ratings = cursor.fetchall()
-    ratings_df = pd.DataFrame(ratings, columns=['user_id', 'book_id', 'book_rating'])
-    return ratings_df
+# Evaluate the model
+def evaluate_model(testset, svd):
+    logger.info("Evaluating model...")
+    predictions = [svd.predict(uid, iid).est for uid, iid, _ in testset]
+    actuals = [true_r for _, _, true_r in testset]
+    mse = mean_squared_error(actuals, predictions)
+    logger.info(f"Evaluation completed with MSE: {mse}")
+    return mse
 
 
+# Evaluate the model for a specific user
+def evaluate_user_model(user_id, ratings_df, svd):
+    logger.info(f"Evaluating model for user {user_id}...")
+    user_ratings = ratings_df[ratings_df['user_id'] == user_id]
+    
+    if user_ratings.empty:
+        return None, "No ratings found for user"
+
+    predictions = [svd.predict(user_id, isbn).est for isbn in user_ratings['book__isbn']]
+    actuals = user_ratings['book_rating'].tolist()
+    mse = mean_squared_error(actuals, predictions)
+    
+    logger.info(f"Evaluation completed with MSE: {mse} for user {user_id}")
+    return mse, None
+
+if __name__ == "__main__":
+    num_recommendations = 10
+    # user_id = 81689 #spanish guy
+    # user_id = 169781 #wizard guy
+    user_id = 239106 #tech guy
+
+    # Load data and models
+    ratings_df = load_data()
+    tfidf_matrix, books = build_tfidf_matrix()
+    nn = load_or_compute_nn(tfidf_matrix)
+    svd = load_or_compute_svd(ratings_df)
+    
+    # Content-Based Filtering
+    content_recs = content_based_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, num_recommendations)
+    print("Content-Based Filtering Recommendations:")
+    print(content_recs)
+
+    # Collaborative Filtering
+    collaborative_recs = collaborative_filtering_recommendations(user_id, ratings_df, svd, num_recommendations)
+    print("\nCollaborative Filtering Recommendations:")
+    for rec in collaborative_recs:
+        print(rec.title)
+
+    # Hybrid Recommendations
+    hybrid_recs = hybrid_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, svd, num_recommendations)
+    print("\nHybrid Recommendations:")
+    for rec in hybrid_recs:
+        print(rec.title)
+    
+    # Split dataset into train and test sets
+    trainset, testset = split_train_test_set(ratings_df)
+    
+    # Evaluate the hybrid model on the test set
+    mse_hybrid = evaluate_model(testset, svd)
+    logger.info(f"\nMean Squared Error for Hybrid Recommendations: {mse_hybrid}")
