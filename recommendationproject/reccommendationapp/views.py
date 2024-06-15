@@ -49,11 +49,22 @@ def user_ratings_view(request, user_id):
 def user_recommendations_view(request, user_id):
     random_user_ids = get_random_user_ids()
     api_url = request.build_absolute_uri(f"/api/fetch_hybrid_recommendations/{user_id}/")
-    response = requests.get(api_url, headers={'Content-Type': 'application/json'})
-    response_data = response.json()
+    
+    try:
+        response = requests.get(api_url, headers={'Content-Type': 'application/json'})
+        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        response_data = response.json()
 
-    recommendations = response_data.get('recommendations', [])
-    mse = response_data.get('mse', None)
+        recommendations = response_data.get('recommendations', [])
+        mse = response_data.get('mse', None)
+    except requests.exceptions.RequestException as e:
+        logger.error(f"API request failed: {e}")
+        recommendations = []
+        mse = None
+    except ValueError as e:
+        logger.error(f"JSON decoding failed: {e}")
+        recommendations = []
+        mse = None
 
     return render(request, 'reccommendationapp/user_recommendations.html', {
         'user_id': user_id,

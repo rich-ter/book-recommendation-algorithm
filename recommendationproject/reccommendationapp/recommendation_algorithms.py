@@ -11,6 +11,9 @@ from django.db.models import Avg
 import numpy as np
 from .models import User, Rating, Book
 
+# Setup Django environment
+os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'recommendationproject.settings')
+django.setup()
 
 SEED = 42
 np.random.seed(SEED)
@@ -51,28 +54,54 @@ def load_or_compute_nn(tfidf_matrix):
     nn.fit(tfidf_matrix)
     return nn
 
+# Create a user profile by aggregating TF-IDF vectors of positively rated books
+def create_user_profile(user_id, ratings_df, tfidf_matrix, books):
+    logger.info(f"Creating user profile for user {user_id}...")
+    user_ratings = ratings_df[ratings_df['user_id'] == user_id]
+    
+    # Filter positively rated books (assuming a rating of 6 or higher is positive)
+    positive_ratings = user_ratings[user_ratings['book_rating'] >= 6]
+    
+    # Get indices of the positively rated books
+    positive_book_indices = [books.index[books['isbn'] == isbn].tolist()[0] for isbn in positive_ratings['book__isbn']]
+    
+    # Aggregate the TF-IDF vectors of the positively rated books
+    if not positive_book_indices:
+        return None
+    user_profile = tfidf_matrix[positive_book_indices].mean(axis=0)
+    
+    logger.info(f"User profile created for user {user_id}")
+    return np.asarray(user_profile)  # Ensure it's a NumPy array
+
+# Content-Based Filtering
+def content_based_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, num_recommendations=10):
+    logger.info(f"Generating content-based recommendations for user {user_id}...")
+    user_profile = create_user_profile(user_id, ratings_df, tfidf_matrix, books)
+    
+    if user_profile is None:
+        return books.nlargest(num_recommendations, 'avg_rating')
+
+    # Compute similarity between the user profile and all books
+    sim_scores = nn.kneighbors(user_profile, n_neighbors=len(books), return_distance=False).flatten()
+    
+    # Get indices of the books that the user has already rated
+    user_ratings = ratings_df[ratings_df['user_id'] == user_id]
+    user_books_indices = [books.index[books['isbn'] == isbn].tolist()[0] for isbn in user_ratings['book__isbn']]
+    
+    # Filter out books that the user has already rated
+    recommended_indices = [idx for idx in sim_scores if idx not in user_books_indices][:num_recommendations]
+    
+    return books.iloc[recommended_indices]
+
 # Load or compute the SVD model
 def load_or_compute_svd(ratings_df):
     logger.info("Computing SVD model for collaborative filtering...")
     reader = Reader(rating_scale=(1, 10))
     data = Dataset.load_from_df(ratings_df[['user_id', 'book__isbn', 'book_rating']], reader)
     trainset = data.build_full_trainset()
-    svd = SVD()
+    svd = SVD(random_state=SEED)
     svd.fit(trainset)
     return svd
-
-# Content-Based Filtering
-def content_based_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, num_recommendations=10):
-    logger.info(f"Generating content-based recommendations for user {user_id}...")
-    user_ratings = ratings_df[ratings_df['user_id'] == user_id]
-
-    if user_id not in ratings_df['user_id'].values:
-        return books.nlargest(num_recommendations, 'avg_rating')
-
-    user_books_indices = [books.index[books['isbn'] == isbn].tolist()[0] for isbn in user_ratings['book__isbn']]
-    sim_scores = nn.kneighbors(tfidf_matrix[user_books_indices], n_neighbors=len(books), return_distance=False).flatten()
-    recommended_indices = [idx for idx in sim_scores if idx not in user_books_indices][:num_recommendations]
-    return books.iloc[recommended_indices]
 
 # Collaborative Filtering with SVD
 def collaborative_filtering_recommendations(user_id, ratings_df, svd, num_recommendations=10):
@@ -132,7 +161,6 @@ def evaluate_model(testset, svd):
     logger.info(f"Evaluation completed with MSE: {mse}")
     return mse
 
-
 # Evaluate the model for a specific user
 def evaluate_user_model(user_id, ratings_df, svd):
     logger.info(f"Evaluating model for user {user_id}...")
@@ -153,7 +181,7 @@ if __name__ == "__main__":
     # user_id = 81689 #spanish guy
     # user_id = 169781 #wizard guy
     user_id = 239106 #tech guy
-
+    
     # Load data and models
     ratings_df = load_data()
     tfidf_matrix, books = build_tfidf_matrix()
