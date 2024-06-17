@@ -1,6 +1,6 @@
 # Book Recommendation System
 
-![Homepage](./project_images/homepage.png)
+<!-- ![Homepage](./project_images/homepage.png) -->
 
 ## Overview
 
@@ -34,7 +34,7 @@ The database schema includes models for books, users, and ratings, ensuring effi
 
 Content-based filtering analyzes book descriptions using TF-IDF vectorization to recommend books with similar content to those the user has rated highly. This approach ensures that recommendations are based on the intrinsic properties of the books.
 
-![Content-Based Recommendations](./project_images/recommendations.png)
+<!-- ![Content-Based Recommendations](./project_images/recommendations.png) -->
 
 ### Collaborative Filtering
 
