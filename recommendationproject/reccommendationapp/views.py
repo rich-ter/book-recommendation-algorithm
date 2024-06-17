@@ -13,11 +13,9 @@ from .recommendation_algorithms import (
     hybrid_recommendations, evaluate_user_model
 )
 
-# Set the random seed for reproducibility
 SEED = 42
 random.seed(SEED)
 
-# Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -25,7 +23,7 @@ def get_random_user_ids():
     users_with_reviews = User.objects.annotate(num_reviews=Count('rating')).filter(num_reviews__gte=5)
     user_ids_with_reviews = list(users_with_reviews.values_list('user_id', flat=True))
     random.shuffle(user_ids_with_reviews)
-    return user_ids_with_reviews[:10]  # Limit to 10 random user IDs
+    return user_ids_with_reviews[:10] 
 
 def homepage_view(request):
     random_user_ids = get_random_user_ids()
@@ -52,7 +50,7 @@ def user_recommendations_view(request, user_id):
     
     try:
         response = requests.get(api_url, headers={'Content-Type': 'application/json'})
-        response.raise_for_status()  # Raise an HTTPError for bad responses (4xx or 5xx)
+        response.raise_for_status()  
         response_data = response.json()
 
         recommendations = response_data.get('recommendations', [])
@@ -81,21 +79,19 @@ def fetch_hybrid_recommendations(request, user_id):
     
     user = get_object_or_404(User, user_id=user_id)
 
-    # Fetch recommendations using the hybrid recommendation system
     logger.info("Loading ratings data...")
-    ratings_df = load_data()  # Load ratings data consistently
+    ratings_df = load_data() 
     logger.info(f"Loaded ratings data with {len(ratings_df)} records")
 
     logger.info("Building TF-IDF matrix...")
-    tfidf_matrix, books = build_tfidf_matrix()  # Build TF-IDF matrix
+    tfidf_matrix, books = build_tfidf_matrix()  
     logger.info(f"Built TF-IDF matrix for {len(books)} books")
 
     logger.info("Computing Nearest Neighbors model for books...")
-    nn = load_or_compute_nn(tfidf_matrix)  # Compute Nearest Neighbors model
+    nn = load_or_compute_nn(tfidf_matrix)  
 
     logger.info("Computing SVD model for collaborative filtering...")
-    svd = load_or_compute_svd(ratings_df)  # Compute SVD model
-
+    svd = load_or_compute_svd(ratings_df)  
     logger.info("Generating hybrid recommendations...")
     recommended_books = hybrid_recommendations(user_id, ratings_df, tfidf_matrix, books, nn, svd, num_recommendations=10)  # Generate hybrid recommendations
 
@@ -112,7 +108,6 @@ def fetch_hybrid_recommendations(request, user_id):
 
     logger.info(f"Recommendations generated for user {user_id}: {[book['title'] for book in recommendations]}")
 
-    # Calculate MSE for the user
     mse, error = evaluate_user_model(user_id, ratings_df, svd)
     if error:
         return Response({'error': error}, status=400)

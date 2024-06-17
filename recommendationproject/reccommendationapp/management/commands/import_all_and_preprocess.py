@@ -18,7 +18,10 @@ class Command(BaseCommand):
             ['python', os.path.join(base_dir, 'users-pre-processing.py')],
             ['python', 'manage.py', 'import_books', os.path.join(base_dir, 'data', 'BX-Books.csv')],
             ['python', 'manage.py', 'import_ratings', os.path.join(base_dir, 'data', 'BX-Book-Ratings.csv')],
+            ['python', os.path.join(base_dir, 'users-pre-processing.py')],
             ['python', os.path.join(base_dir, 'books-pre-processing.py')],
+            ['python', os.path.join(base_dir, 'ratings-pre-processing.py')],
+
         ]
 
         for command in commands_and_scripts:
